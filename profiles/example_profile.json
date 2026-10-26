@@ -1,0 +1,95 @@
+{
+  "$schema": "../insulin_pump/schemas/profile.schema.json",
+  "name": "Example adult profile",
+  "basal_rate": {
+    "default": 0.8,
+    "segments": [
+      {
+        "start": "03:00",
+        "end": "08:00",
+        "value": 1.0
+      },
+      {
+        "start": "22:00",
+        "end": "03:00",
+        "value": 0.7
+      }
+    ]
+  },
+  "carb_ratio": {
+    "default": 12,
+    "segments": [
+      {
+        "start": "06:00",
+        "end": "11:00",
+        "value": 9
+      }
+    ]
+  },
+  "correction_factor": {
+    "default": 50,
+    "segments": [
+      {
+        "start": "22:00",
+        "end": "06:00",
+        "value": 60
+      }
+    ]
+  },
+  "target": {
+    "default": 110,
+    "segments": [
+      {
+        "start": "22:00",
+        "end": "06:00",
+        "value": 120
+      }
+    ]
+  },
+  "correct_above": {
+    "default": 150,
+    "segments": [
+      {
+        "start": "22:00",
+        "end": "06:00",
+        "value": 170
+      }
+    ]
+  },
+  "low_threshold": {
+    "default": 70,
+    "segments": [
+      {
+        "start": "22:00",
+        "end": "06:00",
+        "value": 80
+      }
+    ]
+  },
+  "insulin": {
+    "curve": "envelope",
+    "duration_minutes": 360,
+    "peak_minutes": 75,
+    "delay_minutes": 10
+  },
+  "limits": {
+    "max_bolus_units": 10,
+    "max_basal_rate_units_per_hour": 2.5,
+    "max_iob_units": 12,
+    "max_hourly_units": 12,
+    "max_daily_units": 60,
+    "max_carbs_grams": 200
+  },
+  "alarms": {
+    "urgent_low": 55,
+    "high_alert": 250
+  },
+  "automation": {
+    "enabled": true,
+    "correction_fraction": 0.3,
+    "max_correction_per_cycle_units": 0.5
+  },
+  "cgm": {
+    "fallback_basal_minutes": 0
+  }
+}

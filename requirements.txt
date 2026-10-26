@@ -1,0 +1,8 @@
+# Runtime dependencies: NONE.
+# The insulin_pump package only uses modules that both CPython (3.9+) and MicroPython
+# provide (json, math, re, time), so it runs unchanged on a Raspberry Pi Pico.
+#
+# Optional development / deployment tools:
+jsonschema>=4.18    # tests cross-check profile.schema.json with a reference JSON Schema 2020-12 validator (skipped if absent)
+mpremote>=1.22      # copy the package to a Pico and run code on it
+mpy-cross>=1.22     # precompile .py -> .mpy to save RAM on the Pico (version must match the board's firmware)

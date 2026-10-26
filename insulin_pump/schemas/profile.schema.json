@@ -1,0 +1,686 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/insulin-pump/profile.schema.json",
+  "title": "Insulin pump therapy profile",
+  "description": "SIMULATION ONLY - not for medical use. Per-person time-of-day therapy settings, safety limits and algorithm tuning. Hard limits here are enforced by the pump firmware; omitted optional settings take the 'default' shown. Glucose values are mg/dL. Insulin amounts are units (U) with at most 3 decimals and are converted to exact integer milliunits. Cross-field rules that JSON Schema cannot express (e.g. low < target <= correct_above at every minute of the day) are enforced in code.",
+  "type": "object",
+  "required": [
+    "name",
+    "basal_rate",
+    "carb_ratio",
+    "correction_factor",
+    "target",
+    "correct_above",
+    "low_threshold"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional editor hint pointing at this schema."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Profile name shown in logs."
+    },
+    "basal_rate": {
+      "$ref": "#/$defs/basalSchedule",
+      "description": "Background insulin rate (U/hr) by time of day."
+    },
+    "carb_ratio": {
+      "$ref": "#/$defs/carbRatioSchedule",
+      "description": "Grams of carbohydrate covered by 1 U, by time of day."
+    },
+    "correction_factor": {
+      "$ref": "#/$defs/correctionFactorSchedule",
+      "description": "mg/dL that 1 U lowers glucose (insulin sensitivity factor), by time of day."
+    },
+    "target": {
+      "$ref": "#/$defs/targetSchedule",
+      "description": "Glucose the pump corrects toward (mg/dL), by time of day."
+    },
+    "correct_above": {
+      "$ref": "#/$defs/correctAboveSchedule",
+      "description": "Corrections are only given above this glucose (mg/dL), by time of day."
+    },
+    "low_threshold": {
+      "$ref": "#/$defs/lowThresholdSchedule",
+      "description": "Glucose considered low for this person (mg/dL), by time of day. At or below it (now or predicted) insulin is suspended and boluses are blocked."
+    },
+    "insulin": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "Insulin action model used for insulin on board (IOB).",
+      "properties": {
+        "curve": {
+          "enum": [
+            "envelope",
+            "exponential",
+            "linear"
+          ],
+          "default": "envelope",
+          "description": "envelope = the larger of exponential and linear at every minute (never under-counts IOB relative to either). exponential = Loop/OpenAPS model. linear = straight-line decay."
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 480,
+          "default": 360,
+          "x-unit": "min",
+          "description": "Duration of insulin action. Minimum 5 h: too short a duration under-counts IOB and causes stacking (Walsh et al. 2014)."
+        },
+        "peak_minutes": {
+          "type": "integer",
+          "minimum": 35,
+          "maximum": 120,
+          "default": 75,
+          "x-unit": "min",
+          "description": "Time of peak insulin activity (Loop/OpenAPS: 75 rapid-acting, 55 ultra-rapid)."
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30,
+          "default": 10,
+          "x-unit": "min",
+          "description": "Delay before insulin starts acting (Loop default 10)."
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "Per-person delivery limits. The pump's own hardware limits always apply as well.",
+      "properties": {
+        "max_bolus_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0.05,
+          "maximum": 25,
+          "default": 10
+        },
+        "max_basal_rate_units_per_hour": {
+          "$ref": "#/$defs/units",
+          "minimum": 0.05,
+          "maximum": 10,
+          "default": 3
+        },
+        "max_iob_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0.5,
+          "maximum": 40,
+          "default": 15
+        },
+        "max_hourly_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0.1,
+          "maximum": 30,
+          "default": 12
+        },
+        "max_daily_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 1,
+          "maximum": 150,
+          "default": 80
+        },
+        "max_carbs_grams": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 250,
+          "x-unit": "g"
+        }
+      }
+    },
+    "alarms": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "urgent_low": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 70,
+          "default": 55,
+          "x-unit": "mg/dL"
+        },
+        "high_alert": {
+          "type": "integer",
+          "minimum": 150,
+          "maximum": 400,
+          "default": 250,
+          "x-unit": "mg/dL"
+        },
+        "low_reservoir_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 20
+        },
+        "critical_reservoir_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 5
+        },
+        "long_low_suspend_minutes": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 240,
+          "default": 120,
+          "x-unit": "min",
+          "description": "Critical alarm when a low suspend lasts this long."
+        },
+        "no_insulin_critical_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 120,
+          "default": 30,
+          "x-unit": "min",
+          "description": "Critical alarm (ketone / DKA risk) when insulin has been withheld because of missing CGM data for this long."
+        }
+      }
+    },
+    "automation": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow small automatic corrections. Basal reduction and low suspend always stay active (they only ever remove insulin)."
+        },
+        "correction_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "x-decimals": 2,
+          "x-type": "rational",
+          "default": 0.3,
+          "description": "Share of the calculated correction given per cycle."
+        },
+        "max_correction_per_cycle_units": {
+          "$ref": "#/$defs/units",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0.5
+        }
+      }
+    },
+    "cgm": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "How CGM data is trusted and interpreted.",
+      "properties": {
+        "max_reading_age_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 20,
+          "default": 15,
+          "x-unit": "min"
+        },
+        "future_tolerance_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1,
+          "x-unit": "min"
+        },
+        "max_plausible_rate": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "x-decimals": 1,
+          "x-type": "rational",
+          "default": 5,
+          "x-unit": "mg/dL/min",
+          "description": "Faster changes between consecutive readings are treated as sensor errors."
+        },
+        "history_window_minutes": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 60,
+          "default": 30,
+          "x-unit": "min"
+        },
+        "rate_window_minutes": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 30,
+          "default": 20,
+          "x-unit": "min"
+        },
+        "min_rate_points": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 10,
+          "default": 3
+        },
+        "min_rate_span_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 30,
+          "default": 10,
+          "x-unit": "min"
+        },
+        "prediction_horizon_minutes": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60,
+          "default": 30,
+          "x-unit": "min"
+        },
+        "rate_combination": {
+          "enum": [
+            "lower",
+            "average"
+          ],
+          "default": "lower",
+          "description": "How the fitted slope and the CGM trend arrow are combined. 'lower' trusts whichever predicts the lower glucose."
+        },
+        "fallback_basal_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120,
+          "default": 0,
+          "x-unit": "min",
+          "description": "Minutes of scheduled basal allowed after CGM data becomes unreliable. 0 = withhold all insulin immediately (the default action is no insulin)."
+        }
+      }
+    },
+    "low_suspend": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "resume_margin_mg_dl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 20,
+          "x-unit": "mg/dL",
+          "description": "Resume only when glucose and prediction are this far above the low threshold."
+        },
+        "resume_min_rate": {
+          "type": "number",
+          "minimum": -3,
+          "maximum": 0,
+          "x-decimals": 1,
+          "x-type": "rational",
+          "default": -1,
+          "x-unit": "mg/dL/min",
+          "description": "Resume only when glucose is changing faster than this (i.e. not falling quickly)."
+        }
+      }
+    },
+    "bolus": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "recommendation_ttl_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 5,
+          "x-unit": "min"
+        },
+        "require_glucose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refuse to bolus without a reliable CGM value or a meter reading."
+        },
+        "meter_min_mg_dl": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60,
+          "default": 20,
+          "x-unit": "mg/dL"
+        },
+        "meter_max_mg_dl": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 600,
+          "default": 600,
+          "x-unit": "mg/dL"
+        }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "cycle_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 5,
+          "x-unit": "min"
+        },
+        "min_cycle_spacing_percent": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 100,
+          "default": 80,
+          "x-unit": "%",
+          "description": "Calls closer together than this share of a cycle deliver nothing."
+        },
+        "missed_cycle_alert_multiple": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6,
+          "default": 2
+        },
+        "max_timed_suspend_minutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 1440,
+          "default": 1440,
+          "x-unit": "min",
+          "description": "Longest timed suspend a user can request (an open-ended suspend is always possible)."
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "Bounded in-memory logs (a microcontroller has very little RAM).",
+      "properties": {
+        "max_decisions": {
+          "type": "integer",
+          "minimum": 12,
+          "maximum": 2016,
+          "default": 288
+        },
+        "max_audit_events": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 2000,
+          "default": 300
+        }
+      }
+    }
+  },
+  "$defs": {
+    "units": {
+      "type": "number",
+      "x-decimals": 3,
+      "x-type": "insulin",
+      "x-unit": "U",
+      "description": "Insulin units (at most 3 decimals; stored exactly as integer milliunits)."
+    },
+    "startTime": {
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "endTime": {
+      "type": "string",
+      "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$"
+    },
+    "basalValue": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10,
+      "x-decimals": 3,
+      "x-type": "insulin",
+      "x-unit": "U/hr"
+    },
+    "carbRatioValue": {
+      "type": "number",
+      "minimum": 2,
+      "maximum": 150,
+      "x-decimals": 1,
+      "x-type": "rational",
+      "x-unit": "g/U"
+    },
+    "correctionFactorValue": {
+      "type": "number",
+      "minimum": 5,
+      "maximum": 400,
+      "x-decimals": 1,
+      "x-type": "rational",
+      "x-unit": "mg/dL/U"
+    },
+    "targetValue": {
+      "type": "integer",
+      "minimum": 80,
+      "maximum": 200,
+      "x-unit": "mg/dL"
+    },
+    "correctAboveValue": {
+      "type": "integer",
+      "minimum": 90,
+      "maximum": 300,
+      "x-unit": "mg/dL"
+    },
+    "lowThresholdValue": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 120,
+      "x-unit": "mg/dL"
+    },
+    "basalSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/basalValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/basalSegment"
+          }
+        }
+      }
+    },
+    "basalSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/basalValue"
+        }
+      }
+    },
+    "carbRatioSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/carbRatioValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/carbRatioSegment"
+          }
+        }
+      }
+    },
+    "carbRatioSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/carbRatioValue"
+        }
+      }
+    },
+    "correctionFactorSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/correctionFactorValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/correctionFactorSegment"
+          }
+        }
+      }
+    },
+    "correctionFactorSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/correctionFactorValue"
+        }
+      }
+    },
+    "targetSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/targetValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/targetSegment"
+          }
+        }
+      }
+    },
+    "targetSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/targetValue"
+        }
+      }
+    },
+    "correctAboveSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/correctAboveValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/correctAboveSegment"
+          }
+        }
+      }
+    },
+    "correctAboveSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/correctAboveValue"
+        }
+      }
+    },
+    "lowThresholdSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/lowThresholdValue"
+        },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/lowThresholdSegment"
+          }
+        }
+      }
+    },
+    "lowThresholdSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "value"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/startTime"
+        },
+        "end": {
+          "$ref": "#/$defs/endTime"
+        },
+        "value": {
+          "$ref": "#/$defs/lowThresholdValue"
+        }
+      }
+    }
+  }
+}
