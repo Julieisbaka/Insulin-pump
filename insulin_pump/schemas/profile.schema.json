@@ -397,13 +397,15 @@
           "type": "integer",
           "minimum": 12,
           "maximum": 2016,
-          "default": 288
+          "default": 48,
+          "description": "Most recent control-cycle decisions kept in RAM (48 = 4 h at 5-min cycles)."
         },
         "max_audit_events": {
           "type": "integer",
           "minimum": 50,
           "maximum": 2000,
-          "default": 300
+          "default": 200,
+          "description": "Most recent audit events kept in RAM."
         }
       }
     }

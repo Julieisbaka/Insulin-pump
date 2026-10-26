@@ -20,7 +20,7 @@ rounding goes toward less insulin.
 ## Layout
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | [insulin_pump/exact.py](insulin_pump/exact.py) | Exact arithmetic: rationals (`Q`), exact decimal parsing, rounding toward less insulin |
 | [insulin_pump/insulin_curve.py](insulin_pump/insulin_curve.py) | IOB curves (envelope / exponential / linear), tabulated with integer-only maths |
 | [insulin_pump/schemas/profile.schema.json](insulin_pump/schemas/profile.schema.json) | **Profile schema**: JSON Schema 2020-12 defining structure, hard limits and default values |
@@ -52,7 +52,7 @@ cannot represent 0.1 exactly. So:
 Rounding direction is always the safe one:
 
 | Quantity | Direction |
-|---|---|
+| --- | --- |
 | Insulin to deliver | Down, to the pump's increment |
 | Insulin on board | Up |
 | Predicted glucose | Down |
@@ -74,7 +74,7 @@ the firmware enforces the same schema at load time.
 Each schedule has an optional `default` and a list of `segments`, so a value can apply to only part of the day.
 
 | Schedule | Unit | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `basal_rate` | U/hr | Background insulin |
 | `carb_ratio` | g/U | Grams of carbohydrate covered by 1 U |
 | `correction_factor` | mg/dL per U | How far 1 U lowers glucose |
@@ -97,7 +97,7 @@ Each schedule has an optional `default` and a list of `segments`, so a value can
 Every section is optional; omitted settings take the schema's `default`.
 
 | Section | Contents |
-|---|---|
+| --- | --- |
 | `insulin` | IOB `curve` (`envelope`, the default, / `exponential` / `linear`), `duration_minutes` (≥ 300), `peak_minutes`, `delay_minutes` |
 | `limits` | Max bolus, max basal rate, max IOB, max hourly and daily insulin, max carbs |
 | `alarms` | Urgent low, high alert, low and critical reservoir, how long a low suspend lasts before a critical alarm, critical alarm after insulin has been withheld for missing CGM data |
@@ -109,15 +109,18 @@ Every section is optional; omitted settings take the schema's `default`.
 | `logging` | Bounded log sizes (fixed memory use on a microcontroller) |
 
 Device facts are **fetched from the devices** rather than hard-coded. From the CGM:
+
 - `get_sensor_info()`: measurable range;
 - `get_trend_arrows()`: the rate each trend arrow stands for.
 
 From the pump:
+
 - `get_pump_info()`: dose increment, hardware single, hourly and daily limits, reservoir capacity.
 
 ### Validation
 
 A profile is rejected as a whole, with every problem listed, if:
+
 - it breaks the schema: wrong type, out-of-range value, too many decimals, unknown or missing key, NaN or Infinity;
 - it fails a cross-field rule, checked at every schedule change point:
   - `urgent_low < low_threshold < target ≤ correct_above < high_alert`;
@@ -130,6 +133,7 @@ A profile is rejected as a whole, with every problem listed, if:
 ## Safety systems
 
 **Glucose data**
+
 - Readings count as untrusted when they are any of the following:
   - missing or non-integer;
   - stale or future-dated;
@@ -141,6 +145,7 @@ A profile is rejected as a whole, with every problem listed, if:
 - A low value counts as low even when the reading is stale, future-dated or implausible.
 
 **Pump modes** (checked in priority order every cycle)
+
 1. `fault`: delivery is stopped until the user clears the fault.
 2. `user_suspend`: suspended by the user, optionally for a set time.
 3. `low_suspend`: glucose is at or below the low threshold now, or predicted to be within the horizon. This is
@@ -158,6 +163,7 @@ A profile is rejected as a whole, with every problem listed, if:
 
 **Independent dose gate** ([safety.py](insulin_pump/safety.py)): every milliunit is checked here immediately
 before delivery.
+
 - Caps per dose type: max bolus, max basal rate × cycle length, automatic correction per cycle.
 - Rolling 1-hour and 24-hour totals.
 - Max IOB for non-basal insulin.
@@ -165,11 +171,13 @@ before delivery.
 - Amounts are rounded down to the motor increment.
 
 **Insulin on board**
+
 - Uses the `envelope` curve by default: at every minute, the larger of the Loop/OpenAPS exponential model and
   linear decay. See [docs/iob-curve-research.md](docs/iob-curve-research.md).
 - Duration must be at least 5 h.
 
 **Verification and fail-safe**
+
 - Every pump response is checked. A failure, partial delivery, over-delivery, driver exception or malformed
   response latches a `FAULT`.
 - If the outcome is unknown, the full dose is assumed to have been delivered.
@@ -179,6 +187,7 @@ before delivery.
 - Basal is prorated exactly across schedule changes that fall inside a cycle.
 
 **Logging**
+
 - Audit and decision logs have fixed sizes; old ledger entries are pruned.
 - Alerts include urgent low, high, low and critical reservoir, and reservoir level unknown.
 
@@ -227,12 +236,19 @@ mpremote exec "from insulin_pump import simulate; simulate.run(hours=2)"
 ```
 
 - On a Pico (RP2040), precompile the modules with `mpy-cross` to save RAM, but keep the `.json` files.
+  For a real device, freeze them into the firmware.
+- Measured with the MicroPython 1.29 heap (32-bit):
+  - about 82 KB for loaded code;
+  - +22 KB for the profile, schema and insulin-curve table;
+  - +38 KB for a running 24 h simulation (bounded logs and mocks).
+- That fits an RP2040 Pico (about 190 KB of heap). A Pico 2 (RP2350, 520 KB) has ample headroom.
 - Real devices would use `SystemClock(utc_offset_minutes=...)`, with the RTC set.
 - Without a board you can run the same smoke test in MicroPython's official WebAssembly build:
   `npm install --no-save @micropython/micropython-webassembly-pyscript` and then
   `node tools/run_micropython_wasm.mjs`.
 
 To connect real devices, replace the mocks with objects that provide the same methods:
+
 - **CGM:** `get_current_glucose()`, `get_glucose_history(minutes)`, `get_glucose_trend()`,
   `get_sensor_info()` and `get_trend_arrows()`.
 - **Pump:** `get_pump_info()`, `get_reservoir_mu()` and `give_insulin(mu) -> DeliveryResult`.

@@ -1,7 +1,15 @@
 import unittest
 
 from insulin_pump.exact import Q
-from insulin_pump.models import DeliveryResult, DeviceInfoError, Dose, DoseKind, Mode, SensorStatus, Severity
+from insulin_pump.models import (
+    DeliveryResult,
+    DeviceInfoError,
+    Dose,
+    DoseKind,
+    Mode,
+    SensorStatus,
+    Severity,
+)
 from insulin_pump.profile import ProfileValidationError
 from insulin_pump.simulate import run
 
@@ -30,7 +38,9 @@ class ClosedLoopTests(unittest.TestCase):
         self.assertEqual(c._basal_carry, 0)
 
     def test_basal_follows_time_of_day_schedule(self):
-        profile = make_profile(basal_rate={"default": 0.6, "segments": [seg("12:00", "13:00", 2.4)]})
+        profile = make_profile(
+            basal_rate={"default": 0.6, "segments": [seg("12:00", "13:00", 2.4)]}
+        )
         c, cgm, _, clock = make_pump(profile)
         first_hour = run_cycles(c, cgm, clock, FLAT, 12)
         second_hour = run_cycles(c, cgm, clock, FLAT, 12)
@@ -38,27 +48,43 @@ class ClosedLoopTests(unittest.TestCase):
         self.assertEqual(sum(d.delivered_mu for d in second_hour), 600)
 
     def test_correction_only_above_correct_above(self):
-        c, _, _, _ = make_pump(values=[140, 140, 140])  # above target 110, below correct-above 150
+        c, _, _, _ = make_pump(
+            values=[140, 140, 140]
+        )  # above target 110, below correct-above 150
         self.assertEqual(c.run_cycle().correction_mu, 0)
         c, _, _, _ = make_pump(values=[200, 200, 200])
         d = c.run_cycle()
-        self.assertEqual(d.correction_mu, 500)  # 0.3 * (200-110)/50 U = 0.54 U, capped at 0.5 U per cycle
+        self.assertEqual(
+            d.correction_mu, 500
+        )  # 0.3 * (200-110)/50 U = 0.54 U, capped at 0.5 U per cycle
 
     def test_correction_uses_lower_of_current_and_predicted(self):
-        c, _, _, _ = make_pump(values=[180, 190, 200], trend="SINGLE_UP")  # predicted 260, current 200
+        c, _, _, _ = make_pump(
+            values=[180, 190, 200], trend="SINGLE_UP"
+        )  # predicted 260, current 200
         d = c.run_cycle()
         self.assertEqual(d.predicted_glucose, 260)
         self.assertEqual(d.correction_mu, 500)
-        c, _, _, _ = make_pump(make_profile(automation={"correction_fraction": 0.1}), values=[180, 190, 200], trend="SINGLE_UP")
-        self.assertEqual(c.run_cycle().correction_mu, 180)  # 0.1 * (200-110)/50 U, not based on 260
+        c, _, _, _ = make_pump(
+            make_profile(automation={"correction_fraction": 0.1}),
+            values=[180, 190, 200],
+            trend="SINGLE_UP",
+        )
+        self.assertEqual(
+            c.run_cycle().correction_mu, 180
+        )  # 0.1 * (200-110)/50 U, not based on 260
 
     def test_correct_above_follows_schedule(self):
-        profile = make_profile(correct_above={"default": 150, "segments": [seg("12:00", "13:00", 220)]})
+        profile = make_profile(
+            correct_above={"default": 150, "segments": [seg("12:00", "13:00", 220)]}
+        )
         c, _, _, _ = make_pump(profile, values=[200, 200, 200])
         self.assertEqual(c.run_cycle().correction_mu, 0)
 
     def test_automation_disabled_means_no_corrections(self):
-        c, _, _, _ = make_pump(make_profile(automation={"enabled": False}), values=[300, 300, 300])
+        c, _, _, _ = make_pump(
+            make_profile(automation={"enabled": False}), values=[300, 300, 300]
+        )
         d = c.run_cycle()
         self.assertEqual(d.correction_mu, 0)
         self.assertEqual(d.delivered_mu, 100)
@@ -72,16 +98,26 @@ class ClosedLoopTests(unittest.TestCase):
         self.assertLess(c.run_cycle().correction_mu, first.correction_mu)
 
     def test_basal_tapers_when_heading_below_target(self):
-        c, _, _, _ = make_pump(values=[115, 110, 105], trend="FORTY_FIVE_DOWN")  # predicted 75
+        c, _, _, _ = make_pump(
+            values=[115, 110, 105], trend="FORTY_FIVE_DOWN"
+        )  # predicted 75
         d = c.run_cycle()
         self.assertEqual(d.mode, Mode.CLOSED_LOOP)
         self.assertEqual(d.basal_request, d.scheduled_basal * Q(5, 40))
 
     def test_lower_of_slope_and_arrow_is_used(self):
-        c, _, _, _ = make_pump(values=FLAT, trend="SINGLE_DOWN")  # slope 0, arrow -2 -> predicted 50
+        c, _, _, _ = make_pump(
+            values=FLAT, trend="SINGLE_DOWN"
+        )  # slope 0, arrow -2 -> predicted 50
         self.assertEqual(c.run_cycle().mode, Mode.LOW_SUSPEND)
-        c, _, _, _ = make_pump(make_profile(cgm={"rate_combination": "average"}), values=FLAT, trend="SINGLE_DOWN")
-        self.assertEqual(c.run_cycle().mode, Mode.CLOSED_LOOP)  # average -1 -> predicted 80
+        c, _, _, _ = make_pump(
+            make_profile(cgm={"rate_combination": "average"}),
+            values=FLAT,
+            trend="SINGLE_DOWN",
+        )
+        self.assertEqual(
+            c.run_cycle().mode, Mode.CLOSED_LOOP
+        )  # average -1 -> predicted 80
 
 
 class LowProtectionTests(unittest.TestCase):
@@ -94,11 +130,15 @@ class LowProtectionTests(unittest.TestCase):
         self.assertIn("low", codes(d))
 
     def test_personal_low_threshold_is_used(self):
-        c, _, _, _ = make_pump(make_profile(low_threshold={"default": 90}), values=[88, 88, 88])
+        c, _, _, _ = make_pump(
+            make_profile(low_threshold={"default": 90}), values=[88, 88, 88]
+        )
         self.assertEqual(c.run_cycle().mode, Mode.LOW_SUSPEND)
 
     def test_low_threshold_follows_schedule(self):
-        profile = make_profile(low_threshold={"default": 70, "segments": [seg("12:00", "13:00", 90)]})
+        profile = make_profile(
+            low_threshold={"default": 70, "segments": [seg("12:00", "13:00", 90)]}
+        )
         c, cgm, _, clock = make_pump(profile, values=[85, 85, 85])
         self.assertEqual(c.run_cycle().mode, Mode.LOW_SUSPEND)
         c.resume()
@@ -126,9 +166,13 @@ class LowProtectionTests(unittest.TestCase):
         c, cgm, _, clock = make_pump(values=[68, 68, 68])
         self.assertEqual(c.run_cycle().mode, Mode.LOW_SUSPEND)
         clock.advance(5)
-        self.assertEqual(run_cycles(c, cgm, clock, [80, 80, 80], 1)[0].mode, Mode.LOW_SUSPEND)  # needs low + 20
+        self.assertEqual(
+            run_cycles(c, cgm, clock, [80, 80, 80], 1)[0].mode, Mode.LOW_SUSPEND
+        )  # needs low + 20
         cgm.history = []
-        self.assertEqual(c.run_cycle().mode, Mode.LOW_SUSPEND)  # CGM lost: stays latched
+        self.assertEqual(
+            c.run_cycle().mode, Mode.LOW_SUSPEND
+        )  # CGM lost: stays latched
         clock.advance(5)
         d = run_cycles(c, cgm, clock, [95, 95, 95], 1)[0]
         self.assertEqual(d.mode, Mode.CLOSED_LOOP)
@@ -140,7 +184,9 @@ class LowProtectionTests(unittest.TestCase):
         clock.advance(5)
         profile_rate_floor = make_profile().low_suspend.resume_min_rate
         self.assertEqual(profile_rate_floor, -1)
-        d = run_cycles(c, cgm, clock, [180, 175, 170], 1, trend="FORTY_FIVE_DOWN")[0]  # -1 mg/dL/min: not > -1
+        d = run_cycles(c, cgm, clock, [180, 175, 170], 1, trend="FORTY_FIVE_DOWN")[
+            0
+        ]  # -1 mg/dL/min: not > -1
         self.assertEqual(d.mode, Mode.LOW_SUSPEND)
 
     def test_long_suspend_escalates(self):
@@ -172,15 +218,23 @@ class CgmLossTests(unittest.TestCase):
         c, cgm, _, clock = make_pump()
         clock.advance(20)
         d = c.run_cycle()
-        self.assertEqual((d.mode, d.sensor_status), (Mode.NO_CGM_SUSPEND, SensorStatus.STALE))
+        self.assertEqual(
+            (d.mode, d.sensor_status), (Mode.NO_CGM_SUSPEND, SensorStatus.STALE)
+        )
         cgm.raise_errors = True
         clock.advance(5)
         self.assertEqual(c.run_cycle().mode, Mode.NO_CGM_SUSPEND)
         self.assertTrue(any(e.event == "cgm_error" for e in c.audit_log))
-        for values, trend, status in (([401], "FLAT", SensorStatus.SENSOR_HIGH), ([150], "UNKNOWN_ARROW", SensorStatus.NO_TREND)):
+        for values, trend, status in (
+            ([401], "FLAT", SensorStatus.SENSOR_HIGH),
+            ([150], "UNKNOWN_ARROW", SensorStatus.NO_TREND),
+        ):
             c, _, _, _ = make_pump(values=values, trend=trend)
             d = c.run_cycle()
-            self.assertEqual((d.mode, d.sensor_status, d.delivered_mu), (Mode.NO_CGM_SUSPEND, status, 0))
+            self.assertEqual(
+                (d.mode, d.sensor_status, d.delivered_mu),
+                (Mode.NO_CGM_SUSPEND, status, 0),
+            )
 
     def test_cgm_device_info_unavailable_withholds(self):
         c, cgm, _, _ = make_pump()
@@ -214,7 +268,9 @@ class CgmLossTests(unittest.TestCase):
             clock.advance(5)
         self.assertNotIn("no_insulin", codes(decisions[0]))
         self.assertIn("no_insulin", codes(decisions[6]))  # 30 min (profile default)
-        self.assertTrue(any(a.severity == Severity.CRITICAL for a in decisions[6].alerts))
+        self.assertTrue(
+            any(a.severity == Severity.CRITICAL for a in decisions[6].alerts)
+        )
 
 
 class FaultTests(unittest.TestCase):
@@ -227,7 +283,9 @@ class FaultTests(unittest.TestCase):
         pump.occluded = False
         clock.advance(5)
         later = run_cycles(c, cgm, clock, FLAT, 3)
-        self.assertTrue(all(x.mode == Mode.FAULT and x.delivered_mu == 0 for x in later))
+        self.assertTrue(
+            all(x.mode == Mode.FAULT and x.delivered_mu == 0 for x in later)
+        )
         self.assertTrue(c.clear_fault())
         self.assertEqual(run_cycles(c, cgm, clock, FLAT, 1)[0].mode, Mode.CLOSED_LOOP)
 
@@ -333,7 +391,11 @@ class UserControlTests(unittest.TestCase):
 
 class BolusTests(unittest.TestCase):
     def test_carbs_use_time_of_day_carb_ratio(self):
-        c, _, _, _ = make_pump(make_profile(carb_ratio={"default": 12, "segments": [seg("12:00", "14:00", 8)]}))
+        c, _, _, _ = make_pump(
+            make_profile(
+                carb_ratio={"default": 12, "segments": [seg("12:00", "14:00", 8)]}
+            )
+        )
         rec = c.calculate_bolus(48)
         self.assertEqual(rec.carb_ratio, 8)
         self.assertEqual(rec.recommended_mu, 6000)
@@ -349,7 +411,9 @@ class BolusTests(unittest.TestCase):
         rec = c.calculate_bolus(0)
         self.assertEqual(rec.correction_mu, 2000)
         self.assertEqual(c.confirm_bolus(rec.id).delivered_mu, 2000)
-        self.assertEqual(c.calculate_bolus(0).recommended_mu, 0)  # the 2 U on board already covers it
+        self.assertEqual(
+            c.calculate_bolus(0).recommended_mu, 0
+        )  # the 2 U on board already covers it
 
     def test_no_correction_between_target_and_correct_above(self):
         c, _, _, _ = make_pump(values=[140, 140, 140])
@@ -383,7 +447,10 @@ class BolusTests(unittest.TestCase):
         c, cgm, _, _ = make_pump(make_profile(bolus={"require_glucose": False}))
         cgm.history = []
         rec = c.calculate_bolus(30)
-        self.assertEqual((rec.glucose_source, rec.correction_mu, rec.recommended_mu), ("none", 0, 3000))
+        self.assertEqual(
+            (rec.glucose_source, rec.correction_mu, rec.recommended_mu),
+            ("none", 0, 3000),
+        )
         self.assertTrue(rec.warnings)
 
     def test_recommendation_capped_at_max_bolus(self):
@@ -520,7 +587,11 @@ class HardeningTests(unittest.TestCase):
         self.assertIn("recalculate", result.message)
 
     def test_schedule_boundary_between_calculate_and_confirm(self):
-        c, _, _, clock = make_pump(make_profile(carb_ratio={"default": 10, "segments": [seg("12:02", "18:00", 5)]}))
+        c, _, _, clock = make_pump(
+            make_profile(
+                carb_ratio={"default": 10, "segments": [seg("12:02", "18:00", 5)]}
+            )
+        )
         rec = c.calculate_bolus(30)
         self.assertEqual(rec.carb_mu, 3000)
         clock.advance(3)
@@ -530,14 +601,18 @@ class HardeningTests(unittest.TestCase):
 
     def test_basal_prorated_across_rate_change(self):
         # Cycle starts at 11:58; rate goes from 1.2 to 2.4 U/hr at 12:00.
-        profile = make_profile(basal_rate={"default": 1.2, "segments": [seg("12:00", "13:00", 2.4)]})
+        profile = make_profile(
+            basal_rate={"default": 1.2, "segments": [seg("12:00", "13:00", 2.4)]}
+        )
         c, _, _, clock = make_pump(profile)
         clock.set(START - 120)
         d = c.run_cycle()
         self.assertEqual(d.scheduled_basal, Q(1200 * 120 + 2400 * 180, 3600))
 
     def test_logs_are_bounded(self):
-        c, cgm, _, clock = make_pump(make_profile(logging={"max_decisions": 12, "max_audit_events": 50}))
+        c, cgm, _, clock = make_pump(
+            make_profile(logging={"max_decisions": 12, "max_audit_events": 50})
+        )
         run_cycles(c, cgm, clock, FLAT, 30)
         for _ in range(60):
             c.calculate_bolus(10)
@@ -549,13 +624,21 @@ class SimulationTests(unittest.TestCase):
     def test_full_day_simulation_with_faults_stays_safe(self):
         for seed in range(4):
             readings = []
-            controller = run(hours=24, seed=seed, verbose=False, summary=True, out=readings.append)
+            controller = run(
+                hours=24, seed=seed, verbose=False, summary=True, out=readings.append
+            )
             cgm_line = [l for l in readings if l.startswith("CGM min/max")][0]
             minimum = int(cgm_line.split(":")[1].split("/")[0])
             self.assertGreater(minimum, 70, "seed %d" % seed)
             events = {e.event for e in controller.audit_log}
-            self.assertTrue({"fault", "fault_cleared", "bolus_delivered", "no_cgm_suspend"} <= events)
-            self.assertLessEqual(sum(controller.ledger.totals_mu.values()), controller.profile.limits.max_daily_mu)
+            self.assertTrue(
+                {"fault", "fault_cleared", "bolus_delivered", "no_cgm_suspend"}
+                <= events
+            )
+            self.assertLessEqual(
+                sum(controller.ledger.totals_mu.values()),
+                controller.profile.limits.max_daily_mu,
+            )
 
     def test_simulation_is_deterministic(self):
         first, second = [], []
@@ -564,8 +647,18 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_simulation_without_faults(self):
-        controller = run(hours=24, seed=1, faults=False, verbose=False)
-        self.assertNotIn(Mode.FAULT, {d.mode for d in controller.log})
+        lines = []
+        controller = run(
+            hours=24,
+            seed=1,
+            faults=False,
+            verbose=False,
+            summary=True,
+            out=lines.append,
+        )
+        modes_line = [l for l in lines if l.startswith("Cycles by mode")][0]
+        self.assertNotIn(Mode.FAULT, modes_line)
+        self.assertNotIn("fault", {e.event for e in controller.audit_log})
 
 
 if __name__ == "__main__":

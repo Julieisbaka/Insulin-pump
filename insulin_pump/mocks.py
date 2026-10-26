@@ -29,6 +29,9 @@ TREND_ARROWS = (
 SENSOR_MIN_MG_DL = 40
 SENSOR_MAX_MG_DL = 400
 READING_INTERVAL_S = 300
+HISTORY_LIMIT = (
+    36  # readings / deliveries the mocks keep in RAM (3 h at 5-min intervals)
+)
 
 
 class Xorshift32:
@@ -214,7 +217,7 @@ class MockCGM:
             if elapsed > 0:
                 rate = (value - prev.mg_dl) / elapsed
         self._history.append(GlucoseReading(timestamp, value, arrow_for_rate(rate)))
-        if len(self._history) > 100:
+        if len(self._history) > HISTORY_LIMIT:
             self._history.pop(0)
 
 
@@ -287,6 +290,8 @@ class MockInsulinDelivery:
         actual = min(actual, self.reservoir_mu)
         self.reservoir_mu -= actual
         self.delivery_log.append(Dose(self._clock.now(), actual))
+        if len(self.delivery_log) > HISTORY_LIMIT:
+            self.delivery_log.pop(0)
         if self._cgm is not None:
             self._cgm.notify_insulin(actual)
         return DeliveryResult(True, actual, "Delivered %d mU" % actual)
