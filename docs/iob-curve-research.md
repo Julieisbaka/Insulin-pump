@@ -31,6 +31,7 @@ IOB(t) = 1 - S*(1-a)*((t^2/(tau*td*(1-a)) - t/tau - 1)*exp(-t/tau) + 1)
 ```
 
 Typical presets:
+
 - Loop's adult rapid-acting preset (Humalog/Novolog): 360 min duration, 75 min peak, 10 min delay.
 - Fiasp/ultra-rapid: about 55 min peak.
 - oref0 limits the peak to 50–120 min for rapid-acting insulin and 35–100 min for ultra-rapid.
@@ -44,7 +45,7 @@ These values come from this repository's integer implementation: delay 10 min, d
 The "old linear 4 h" column is the previous version of this project.
 
 | Minutes after dose | Old linear 4 h | Linear 6 h 10 min | Exponential (Loop adult) | Envelope (used) |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 0 | 100% | 100% | 100% | 100% |
 | 15 | 94% | 96% | 100% | 100% |
 | 30 | 88% | 92% | 97% | 97% |
